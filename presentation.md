@@ -461,7 +461,7 @@ function readAndParse(file, callback) {
   fs.readFile(file, { encoding: 'utf8' }, function (err, data) {
     if (err) return callback(err);
     try {
-      callback(JSON.parse(data););
+      callback(null, JSON.parse(data));
     } catch (e) {
       callback(e);
     }
@@ -669,7 +669,7 @@ function reportError(err, cb) {
 server = http.createServer(...);
 function shutDownGracefully(err, cb) {
   // quit accepting connection, clean up any other resources
-  server.close(function () {¡
+  server.close(function () {
     // can also wait for all connections: server._connections
     reportError(err, cb)
   });
