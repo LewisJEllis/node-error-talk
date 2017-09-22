@@ -8,9 +8,10 @@ build-lists: true
 ---
 
 ## Who are you?
-- I'm Lewis, I like JavaScript, I work for Sentry
-- Sentry is the open source crash reporting & error tracking service
-- I maintain raven-node, the Sentry Node.js SDK.
+- I'm Lewis, I like JavaScript (and other things)
+- Made Bee-Queue, Redis-backed job queue for Node.js
+  - Like Celery, Resque, Kue, Bull
+- Worked on raven-node, Sentry's Node error reporting SDK
   - It captures and reports about 100 million errors per week
 
 ---
@@ -319,7 +320,7 @@ Error: boom
 
 ---
 
-# Three core guidelines
+# Three Guiding Principles
 
 ---
 
@@ -366,8 +367,7 @@ req.on('error', function (err) {
 - Network timeouts
 - Database is down
 - Disk got full
-- 3rd party API returning errors
-  - us-east-1 S3
+- 3rd party API returning errors: S3 goes down
 - Unexpected or missing user inputs (`JSON.parse`)
 
 ^ Tubes get jammed
@@ -394,8 +394,7 @@ req.on('error', function (err) {
 ## What to do with each:
 - Operational errors
   - Known; handle manually wherever they may occur
-  - Recoverable if handled correctly
-      - We don't have to shut down everything just because S3 is down
+  - Recoverable if handled correctly: S3 being down doesn't kill us
   - Avoid assuming anything is reliable outside your own process
 
 - Programming errors
@@ -406,6 +405,8 @@ req.on('error', function (err) {
 
 ^ Operational errors that we don't handle become programming errors
 ^ Highlight "unknown" bit about programming errors
+^ No amount of additional code can fix a typo
+
 
 ---
 
@@ -429,18 +430,20 @@ req.on('error', function (err) {
 ---
 
 ## The game plan
-1. Always know when errors happen: don't ignore!
-2. Handle what you can, avoid what you can't
-3. Know and use different mechanisms for effective handling
-4. Have a global catch-all for the errors you couldn't handle
-5. Use a process manager so shutting down is no big deal
-6. Accept when it's time to pack up shop, clean up, shut down
+0. Follow the guiding principles
+1. Know and use different mechanisms for effective handling
+2. Have a global catch-all for the errors you couldn't handle
+3. Use a process manager so shutting down is no big deal
+4. Accept when it's time to pack up shop, clean up, shut down
 
-^ In accordance with our three core guidelines...
+^ In accordance with our three guiding principles...
+^  - Always know when errors happen: don't ignore!
+^  - Handle what you can, avoid what you can't
+^  - Don't keep running in an unknown state
 
 ---
 
-# 3. Know and use different mechanisms for effective handling
+# 1. Know and use different mechanisms for effective handling
 
 ---
 
@@ -448,6 +451,7 @@ req.on('error', function (err) {
 - Try/Catch - `throw` and `try/catch`
 - Callbacks - `err` first argument and `if (err)`
 - Promises - `reject(err)` and `.catch()`
+- Async/Await - Sugar for promises + `try/catch`
 - EventEmitters - `error` events and `.on('error')`
 - Express - `next(err)` and error-handling middleware
 
@@ -460,11 +464,13 @@ req.on('error', function (err) {
 function readAndParse(file, callback) {
   fs.readFile(file, { encoding: 'utf8' }, function (err, data) {
     if (err) return callback(err);
+    var parsed;
     try {
-      callback(null, JSON.parse(data));
+      parsed = JSON.parse(data);
     } catch (e) {
-      callback(e);
+      return callback(e);
     }
+    callback(null, parsed);
   });
 }
 ```
@@ -488,6 +494,17 @@ p.then(parseJson)
 ```
 
 ^ reason should be an Error object but promise terminology is "reason" not "err"
+
+---
+
+## Async/Await
+```javascript
+try {
+  await somePromiseThatRejects()
+} catch (e) {
+  // e is the rejection reason!
+}
+```
 
 ---
 
@@ -535,7 +552,7 @@ app.use(function (req, res, next, err) {
 
 ---
 
-# 4. Have a global catch-all for the errors you couldn't handle
+# 2. Have a global catch-all for the errors you couldn't handle
 
 ---
 
@@ -552,7 +569,7 @@ process.on('uncaughtException', function (err) {
 
 ---
 
-# 5. Use a process manager so shutting down is no big deal
+# 3. Use a process manager so shutting down is no big deal
 
 ---
 
@@ -589,7 +606,7 @@ server.listen(80, function () {
 
 ---
 
-# 6. Accept when it's time to pack up shop, clean up, shut down
+# 4. Accept when it's time to pack up shop, clean up, shut down
 
 ---
 
@@ -649,7 +666,7 @@ db.query('SELECT ...', function (err, results) {
 ---
 
 ## Alternatively, use Sentry
-The `raven` npm package is our Node SDK:
+The `raven` npm package is Sentry's Node error reporting SDK:
 
 ```javascript
 var Raven = require('raven');
@@ -668,9 +685,9 @@ function reportError(err, cb) {
 ```javascript
 server = http.createServer(...);
 function shutDownGracefully(err, cb) {
-  // quit accepting connection, clean up any other resources
+  // quit accepting connections, clean up any other resources
   server.close(function () {
-    // can also wait for all connections: server._connections
+    // could also wait for all connections: server._connections
     reportError(err, cb)
   });
 }
@@ -700,9 +717,9 @@ function reportError(err, cb) {
 }
 
 function shutDownGracefully(err, cb) {
-  // quit accepting connection, clean up any other resources
+  // quit accepting connections, clean up any other resources
   server.close(function () {
-    // can also wait for all connections: server._connections
+    // could also wait for all connections: server._connections
     reportError(err, cb)
   });
 }
@@ -732,26 +749,28 @@ server.listen(80, function () {
 ## Other global error mechanisms
 - `process.on('uncaughtException')`
 - `process.on('unhandledRejection')`
-- Domains - but application code shouldn't need them
+  - Currently non-fatal, warning starting in Node 7
+  - Future: fatal, will cause process exit
+- Domains: application code shouldn't need them
 
 ---
 
-## Recap: overall gameplan
-1. Always know when errors happen: don't ignore!
-2. Handle what you can, avoid what you can't
-3. Know and use different mechanisms for effective handling
-4. Have a global catch-all for the errors you couldn't handle
-5. Use a process manager so shutting down is no big deal
-6. Accept when it's time to pack up shop, clean up, shut down
+## Recap: overall
+0. Follow the guiding principles
+1. Know and use different mechanisms for effective handling
+2. Have a global catch-all for the errors you couldn't handle
+3. Use a process manager so shutting down is no big deal
+4. Accept when it's time to pack up shop, clean up, shut down
 
 ---
 ## Related things I didn't go into
 - Run-to-completion semantics & the event loop
 - V8 stacktrace API
 - The "callback contract"
-- Async/Await
-- Domains (and async_hooks)
+- Asynchronous stacktraces
 - Cluster module & process managers
+- Domains
+- async_hooks (!!!!!)
 
 ^ Each of these bullets is at least a lightning talk worth of stuff
 
@@ -764,11 +783,6 @@ server.listen(80, function () {
 
 ---
 
-## Where are the slides?
+# Thank you!
 * Slides available at [GitHub.com/LewisJEllis/node-error-talk](https://github.com/lewisjellis/node-error-talk)
 * I'm Lewis J Ellis: @lewisjellis on [Twitter](https://twitter.com/lewisjellis) and [GitHub](https://github.com/lewisjellis)
-
----
-
-# Thank you!
-## May your Node applications run happily ever after
